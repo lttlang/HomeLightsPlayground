@@ -1,8 +1,8 @@
 import paho.mqtt.client as mqtt
-import json 
-import requests
+import json, requests, os 
+from urllib.parse import urlparse
 from datetime import datetime, time
-import os
+from flask import Flask
 
 #Hardcoded door coordinates.This is where we want to detect a person
 DOOR_ZONE_X1 = 0.448958 
@@ -14,9 +14,13 @@ headers = {
     "Authorization": "Bearer %s" % os.environ['LIFX_AUTH_TOKEN'],
 }
 
+app = Flask(__name__)
+
 def on_connect(client, userdata, flags, rc):
     print("connected with result code"+str(rc))
-    client.subscribe(os.environ['CAMERA_MQTT_TOPIC'])
+
+def on_subscribe(client, obj, mid, granted_qos):
+    print("subscribed : "+str(mid)+ " "+str(granted_qos))
 
 def on_message(client, userdata, msg):
     #print(msg.topic + " " + str(msg.payload)) 
@@ -31,6 +35,9 @@ def on_message(client, userdata, msg):
                 print('hello!')
                 #getStateOfLights()
                 return 
+
+def on_log(client, obj, level, string):
+    print(string)
 
 def checkObjectIntersectsCamera(item):
      left = max(DOOR_ZONE_X1, item['x1'])
@@ -71,5 +78,20 @@ def turnOffLights():
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
-client.connect(os.environ['CAMERA_IP'], int(os.environ['CAMERA_PORT']), 60)
-client.loop_forever()
+client.on_subscribe = on_subscribe
+
+client.on_log = on_log
+
+url_str = os.environ.get('CLOUDMQTT_URL', 'mqtt://localhost:1883')
+url = urlparse(url_str)
+client.connect(url.hostname, url.port)
+
+client.subscribe(os.environ['CAMERA_MQTT_TOPIC'], 0)
+
+client.loop_start()
+
+def main():
+    app.run(debug=True, use_reloader=True)
+
+if __name__ == '__main__':
+    main()

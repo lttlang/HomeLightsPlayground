@@ -1,0 +1,5 @@
+pkg-config
+cmake
+openssl
+libc-ares-dev
+libwebsockets-dev
