@@ -82,13 +82,14 @@ client.on_subscribe = on_subscribe
 
 client.on_log = on_log
 
-url_str = os.environ.get('CLOUDMQTT_URL', 'mqtt://localhost:1883')
-url = urlparse(url_str)
-client.connect(url.hostname, url.port)
+#Still figuring out what to use for my broker
+#url_str = os.environ.get('CLOUDMQTT_URL', 'mqtt://localhost:1883')
+#url = urlparse(url_str)
+#client.connect(url.hostname, url.port)
 
-client.subscribe(os.environ['CAMERA_MQTT_TOPIC'], 0)
+#client.subscribe(os.environ['CAMERA_MQTT_TOPIC'], 0)
 
-client.loop_start()
+#client.loop_start()
 
 def main():
     app.run(debug=True, use_reloader=True)
