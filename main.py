@@ -1,12 +1,10 @@
 import paho.mqtt.client as mqtt
 import json, requests, os, pytz
 import logging, logging.handlers
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from urllib.parse import urlparse
-from datetime import datetime, time
+import datetime
 from flask import Flask
+from emailalert import sendEmailAlert
 
 #Hardcoded door coordinates.This is where we want to detect a person
 DOOR_ZONE_X1 = 0.448958 
@@ -20,6 +18,13 @@ headers = {
 
 app = Flask(__name__)
 
+lastDetectedTime = datetime.datetime.min
+
+UNKNOWN = 0
+EMPTY = 1
+OCCUPIED = 2
+currentApartmentState = UNKNOWN
+
 def on_connect(client, userdata, flags, rc):
     logging.debug("connected with result code"+str(rc))
 
@@ -27,23 +32,46 @@ def on_subscribe(client, obj, mid, granted_qos):
     logging.debug("subscribed : "+str(mid)+ " "+str(granted_qos))
 
 def on_message(client, userdata, msg):
-    #logging.debug(msg.topic + " " + str(msg.payload)) 
-    pst = pytz.timezone('America/Los_Angeles')
-    start = time(17, 0, tzinfo=pst)
-    end = time(23, 0, tzinfo=pst)
-    now = datetime.now(pst)
-    if not isNowInTimePeriod(start, end, now.time()):
-        #logging.debug(str(now.time()) + "not in time range")
-        return
-    #logging.debug("in time range")
+    #logging.debug(msg.topic + " " + str(msg.payload))
     payload = json.loads(msg.payload)
-    if 'objects' in payload:
-        objects = payload['objects']
-        for item in objects:
-            if checkObjectIntersectsCamera(item):
-                #do something for camera
-                getStateOfLights()
-                return 
+    isPersonDetected = 'objects' in payload and len(payload['objects']) > 0
+    global currentApartmentState
+    global lastDetectedTime
+    if isPersonDetected :
+        #logging.debug("person detected")
+        lastDetectedTime = datetime.datetime.now()
+        #logging.debug("currentApartmentState: "+str(currentApartmentState))
+        if currentApartmentState != OCCUPIED:
+            currentApartmentState = OCCUPIED
+            logging.debug("Apartment is now occupied")
+            sendEmailAlert("Apartment is now occupied")
+            triggerBulbOnFlow(payload['objects'])
+    else:
+        currentTime = datetime.datetime.now()
+        elapsed = currentTime - lastDetectedTime
+        if elapsed >= datetime.timedelta(hours=1) and currentApartmentState != EMPTY:
+            currentApartmentState = EMPTY
+            logging.debug("Apartment is now empty")
+            sendEmailAlert("Apartment is now empty")
+            return #for now, we can do some logic to turn off lights here
+        else:
+            #don't do anything
+            return
+
+def triggerBulbOnFlow(objects): 
+    pst = pytz.timezone('America/Los_Angeles')
+    start = datetime.time(17, 0, tzinfo=pst)
+    end = datetime.time(0, 0, tzinfo=pst)
+    now = datetime.datetime.now(pst)
+    if not isNowInTimePeriod(start, end, now.time()):
+        logging.debug(str(now.time()) + "not in time range")
+        return
+    logging.debug("in time range")
+    for item in objects:
+        if checkObjectIntersectsCamera(item):
+            #do something for camera
+            getStateOfLights()
+            return
 
 def on_log(client, obj, level, string):
     logging.debug(string)
@@ -75,7 +103,7 @@ def turnOnLights():
         "power": "on",
     }
     response = requests.post('https://api.lifx.com/v1/lights/all/state/delta', data=payload, headers=headers)
-    logging.debug("turning on lights response: " +response)
+    logging.debug("turning on lights response: " +str(response))
 
 def turnOffLights():
     sendEmailAlert("Turning lights off")
@@ -83,22 +111,7 @@ def turnOffLights():
         "power": "off",
     }
     response = requests.post('https://api.lifx.com/v1/lights/all/state/delta', data=payload, headers=headers)
-    logging.debug(response)
-
-def sendEmailAlert(message):
-    toAddr = os.environ['MAINTAINER_EMAIL_USERNAME']
-    fromAddr = os.environ['MAINTAINER_EMAIL_USERNAME']
-    msg = MIMEMultipart()
-    msg['To'] = toAddr
-    msg['From'] = fromAddr
-    msg['Subject'] = "Home Lights MQTT Client Notification"
-    msg.attach(MIMEText(message, 'plain'))
-    text = msg.as_string()
-    server = smtplib.SMTP('smtp.gmail.com',587)
-    server.starttls()
-    server.login(fromAddr, os.environ['MAINTAINER_EMAIL_PW'])
-    server.sendmail(fromAddr, toAddr, text)
-    server.quit()
+    logging.debug(str(response))
 
 handler = logging.handlers.WatchedFileHandler("myapp.log")
 formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(message)s")
