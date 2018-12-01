@@ -1,0 +1,4 @@
+.DS_Store
+.environment
+__pycache__/
+myapp.log
