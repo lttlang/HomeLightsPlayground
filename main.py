@@ -42,14 +42,13 @@ def on_message(client, userdata, msg):
         lastDetectedTime = datetime.datetime.now()
         #logging.debug("currentApartmentState: "+str(currentApartmentState))
         if currentApartmentState != OCCUPIED:
-            currentApartmentState = OCCUPIED
-            logging.debug("Apartment is now occupied")
-            sendEmailAlert("Apartment is now occupied")
+            #currentApartmentState = OCCUPIED
             triggerBulbOnFlow(payload['objects'])
     else:
         currentTime = datetime.datetime.now()
         elapsed = currentTime - lastDetectedTime
-        if elapsed >= datetime.timedelta(hours=1) and currentApartmentState != EMPTY:
+        #logging.debug("elapsed: "+str(elapsed)+" timedelta: "+str(datetime.timedelta(hours=1)))
+        if elapsed >= datetime.timedelta(minutes=10) and currentApartmentState != EMPTY:
             currentApartmentState = EMPTY
             logging.debug("Apartment is now empty")
             sendEmailAlert("Apartment is now empty")
@@ -58,31 +57,37 @@ def on_message(client, userdata, msg):
             #don't do anything
             return
 
-def triggerBulbOnFlow(objects): 
+def triggerBulbOnFlow(objects):
+    global currentApartmentState
     pst = pytz.timezone('America/Los_Angeles')
     start = datetime.time(17, 0, tzinfo=pst)
     end = datetime.time(0, 0, tzinfo=pst)
     now = datetime.datetime.now(pst)
     if not isNowInTimePeriod(start, end, now.time()):
-        logging.debug(str(now.time()) + "not in time range")
+        #logging.debug(str(now.time()) + "not in time range")
         return
-    logging.debug("in time range")
+    #logging.debug("in time range")
     for item in objects:
         if checkObjectIntersectsCamera(item):
             #do something for camera
+            currentApartmentState = OCCUPIED
+            logging.debug("Apartment is now occupied")
+            sendEmailAlert("Apartment is now occupied")
             getStateOfLights()
-            return
+            break
 
 def on_log(client, obj, level, string):
     logging.debug(string)
 
 def checkObjectIntersectsCamera(item):
-     left = max(DOOR_ZONE_X1, item['x1'])
-     right = min(DOOR_ZONE_X0, item['x0'])
-     bottom = max(DOOR_ZONE_Y1, item['y1'])
-     top = min(DOOR_ZONE_Y0, item['y0'])
-     return left < right and bottom < top
- 
+    logging.debug(str(item['x1']) + ", " + str(item['x0']) +", "+
+                  str(item['y1']) + ", "+ str(item['y0']))
+    x_mid = (DOOR_ZONE_X0 - DOOR_ZONE_X1) / 2 + DOOR_ZONE_X1
+    y_mid = (DOOR_ZONE_Y0 - DOOR_ZONE_Y1) / 2 + DOOR_ZONE_Y1
+    #logging.debug("x_mid: "+ str(x_mid))
+    #logging.debug("y_mid: " + str(y_mid))
+    return item['x1'] < x_mid and x_mid < item['x0'] and item['y1'] < y_mid and y_mid < item['y0']
+
 def isNowInTimePeriod(startTime, endTime, nowTime):
     if startTime < endTime:
         return nowTime >= startTime and nowTime <= endTime

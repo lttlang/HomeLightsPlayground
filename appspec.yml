@@ -1,0 +1,10 @@
+version: 0.0
+os: linux
+files:
+        - source: /
+          destination: ~/Documents/HomeLightsPlayground
+hooks:
+        BeforeInstall:
+                - location: ~/Documents/HomeLightsPlayground/setEnv.sh
+        AfterInstall:
+                - location: ~/Documents/HomeLightsPlayground/run.sh
